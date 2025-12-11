@@ -303,7 +303,7 @@ def detect_pipe_circles(img, visualization=True, output_dir=None, save_intermedi
         vis_save = None
         if outdir is not None:
             vis_save = outdir / "visualization.png"
-        visualize_results(img, processed, edges, outer_circle, inner_circle, edge_points, hough_circles=hough_circles, save_path=vis_save, show=False)
+        visualize_results(img, processed, edges, outer_circle, inner_circle, edge_points, hough_circles=hough_circles, save_path=vis_save, show=visualization)
     
     # 计算管壁厚度
     wall_thickness = None
@@ -396,7 +396,7 @@ def calculate_pixel_to_mm(known_diameter_mm, measured_diameter_pixel):
     return known_diameter_mm / measured_diameter_pixel
 
 
-def process_folder(input_path, output_root, recursive=False):
+def process_folder(input_path, output_root):
     """处理文件夹中的所有图像，保存中间结果与可视化，生成汇总 CSV
 
     输出结构:
@@ -415,12 +415,8 @@ def process_folder(input_path, output_root, recursive=False):
     exts = ('*.png', '*.jpg', '*.jpeg', '*.bmp', '*.tif', '*.tiff')
     files = []
     if input_path.is_dir():
-        if recursive:
-            for e in exts:
-                files.extend(input_path.rglob(e))
-        else:
-            for e in exts:
-                files.extend(input_path.glob(e))
+        for e in exts:
+            files.extend(input_path.glob(e))
     elif input_path.is_file():
         files = [input_path]
     else:
@@ -428,29 +424,23 @@ def process_folder(input_path, output_root, recursive=False):
 
     results = []
     for f in sorted(files):
-        name = f.stem
-        outdir = output_root / name
-        outdir.mkdir(parents=True, exist_ok=True)
         print(f"处理: {f}")
-        img = cv2.imread(str(f), cv2.IMREAD_GRAYSCALE)
-        if img is None:
-            print(f"无法读取: {f}")
+        # 复用单图处理函数以保证批量与单张输出一致
+        res = process_single_image(f, output_root, show_visualization=False)
+        if res is None:
+            results.append({
+                'filename': str(f.name),
+                'outer_x': '',
+                'outer_y': '',
+                'outer_r': '',
+                'inner_x': '',
+                'inner_y': '',
+                'inner_r': '',
+                'thickness': ''
+            })
             continue
-        outer, inner, thickness, extras = detect_pipe_circles(img, visualization=False, output_dir=outdir, save_intermediate=True)
 
-        # 保存最终叠加结果（如果 detect_pipe_circles 没有保存 visualization）
-        visualize_results(img, extras['processed'], extras['edges'], outer, inner, extras['edge_points'], hough_circles=extras.get('hough_circles'), save_path=outdir / 'visualization.png', show=False)
-
-        # 保存 OpenCV style result image as well (already done in visualize if used, but produce a saved image here)
-        result_img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-        if outer is not None:
-            cv2.circle(result_img, (outer[0], outer[1]), outer[2], (0, 128, 0), 4)
-        if inner is not None:
-            cv2.circle(result_img, (inner[0], inner[1]), inner[2], (0, 0, 255), 4)
-        if thickness is not None:
-            cv2.putText(result_img, f"Wall Thickness={thickness}px", (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 255), 3)
-        cv2.imwrite(str(outdir / 'result_pipe_detection.jpg'), result_img)
-
+        outer, inner, thickness = res
         results.append({
             'filename': str(f.name),
             'outer_x': outer[0] if outer else '',
@@ -493,8 +483,6 @@ def process_single_image(img_path, output_dir=None, show_visualization=False):
     if img is None:
         print(f"错误: 无法读取图像: {img_path}")
         return None
-    
-    print(f"处理图像: {img_path.name}")
     
     # 设置输出目录
     if output_dir is not None:
@@ -564,6 +552,7 @@ def process_single_image(img_path, output_dir=None, show_visualization=False):
         
         cv2.imwrite(str(save_path), result_img)
         print(f"\n结果已保存到: {save_path}")
+        print("*" * 70)
     
     return outer, inner, thickness
 
@@ -576,16 +565,13 @@ def main():
         epilog="""
 示例用法:
   # 处理单张图像（显示可视化窗口）
-  python main.py -i image.jpg --show
+  python main.py -i 20pipe/2019_10_23_13_44_44.jpg --show
   
   # 处理单张图像并保存到指定目录
-  python main.py -i image.jpg -o output/
+  python main.py -i 20pipe/2019_10_23_13_44_44.jpg -o output_2019_10_23_13_44_44/
   
   # 批量处理文件夹（不显示窗口）
-  python main.py -i input_folder/ -o output/ --batch
-  
-  # 递归处理文件夹
-  python main.py -i input_folder/ -o output/ --batch --recursive
+  python main.py -i 20pipe/ -o output/ --batch
         """
     )
     
@@ -595,8 +581,6 @@ def main():
                        help='输出目录（可选，默认保存到当前目录）')
     parser.add_argument('--batch', action='store_true',
                        help='批量处理模式（处理文件夹中所有图像）')
-    parser.add_argument('--recursive', action='store_true',
-                       help='递归搜索子文件夹（仅在批量模式下有效）')
     parser.add_argument('--show', action='store_true',
                        help='显示可视化窗口（仅在单图模式下有效）')
     parser.add_argument('--save-intermediate', action='store_true',
@@ -622,10 +606,9 @@ def main():
         print(f"批量处理模式")
         print(f"输入目录: {input_path}")
         print(f"输出目录: {output_root}")
-        print(f"递归搜索: {'是' if args.recursive else '否'}")
         print("-" * 50)
         
-        process_folder(input_path, output_root, recursive=args.recursive)
+        process_folder(input_path, output_root)
     else:
         # 单图处理模式
         if not input_path.is_file():
