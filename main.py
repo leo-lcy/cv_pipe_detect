@@ -43,6 +43,7 @@ def ransac_circle_fit(points, max_iterations=1000, threshold=3.0, min_inliers_ra
     best_circle = None
     best_inliers = None
     best_inlier_count = 0
+    best_iteration = None
     
     n_points = len(points)
     min_inliers = int(n_points * min_inliers_ratio)
@@ -76,13 +77,21 @@ def ransac_circle_fit(points, max_iterations=1000, threshold=3.0, min_inliers_ra
                 best_circle = refined_circle
                 best_inliers = inliers_mask
                 best_inlier_count = inlier_count
+                best_iteration = iteration
         
         # 早停：如果找到足够好的模型
         if best_inlier_count > n_points * 0.8:
             break
     
     if best_circle is None or best_inlier_count < min_inliers:
+        # 若未找到满足条件的模型，返回 None
+        if best_iteration is not None:
+            print(f"RANSAC 未能满足最小内点比例，最佳尝试出现在迭代 {best_iteration}，内点数={best_inlier_count}")
         return None
+
+    # 诊断输出：记录最佳模型出现的迭代轮次
+    if best_iteration is not None:
+        print(f"RANSAC 最佳模型出现在迭代 {best_iteration}，内点数={best_inlier_count}")
     
     return (*best_circle, best_inliers)
 
@@ -159,8 +168,8 @@ def detect_pipe_circles(img, visualization=True, output_dir=None, save_intermedi
     processed = preprocess_image(img, save_path=(outdir / "processed.png") if (outdir and save_intermediate) else None)
     
     # 自适应边缘检测
-    high_thresh = np.percentile(processed, 90)
-    low_thresh = high_thresh * 0.3
+    high_thresh = np.percentile(processed, 90) # 让图像里最亮的那 10% 像素作为“强边缘”的候选。
+    low_thresh = high_thresh * 0.3  # 让图像里最亮 30% 亮度作为“弱边缘”的候选。
     edges = cv2.Canny(processed, low_thresh, high_thresh)
     
     # 连接断裂的边缘
@@ -219,10 +228,10 @@ def detect_pipe_circles(img, visualization=True, output_dir=None, save_intermedi
         center_y = np.median(circles[:k, 1])
         print(f"估计圆心: ({center_x:.1f}, {center_y:.1f})")
 
-    # 准备霍夫变换检测到的圆列表，传给可视化函数
-    hough_circles = []
-    if circles_hough is not None:
-        for c in circles_hough[0]:
+        # 准备霍夫变换检测到的圆列表，传给可视化函数
+        hough_circles = []
+        # 只取前 k 个霍夫检测结果用于可视化
+        for c in circles_hough[0][:5]:
             hough_circles.append((float(c[0]), float(c[1]), float(c[2])))
 
     # 2. 径向直方图分析 (利用同心圆特性)
