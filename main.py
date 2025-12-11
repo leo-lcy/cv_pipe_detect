@@ -395,7 +395,7 @@ def process_folder(input_path, output_root):
 
     输出结构:
       output_root/
-        <image_name>/
+        <image_path>/
           processed.png
           edges.png
           visualization.png
@@ -424,7 +424,7 @@ def process_folder(input_path, output_root):
         res = process_single_image(f, per_image_out, show_visualization=False)
         if res is None:
             results.append({
-                'filename': str(f.name),
+                'filepath': str(f),
                 'outer_x': '',
                 'outer_y': '',
                 'outer_r': '',
@@ -437,7 +437,7 @@ def process_folder(input_path, output_root):
 
         outer, inner, thickness = res
         results.append({
-            'filename': str(f.name),
+            'filepath': str(f),
             'outer_x': outer[0] if outer else '',
             'outer_y': outer[1] if outer else '',
             'outer_r': outer[2] if outer else '',
@@ -450,7 +450,7 @@ def process_folder(input_path, output_root):
     # 写 CSV
     csv_path = output_root / 'results.csv'
     with open(csv_path, 'w', newline='') as csvfile:
-        fieldnames = ['filename', 'outer_x', 'outer_y', 'outer_r', 'inner_x', 'inner_y', 'inner_r', 'thickness']
+        fieldnames = ['filepath', 'outer_x', 'outer_y', 'outer_r', 'inner_x', 'inner_y', 'inner_r', 'thickness']
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
         for r in results:

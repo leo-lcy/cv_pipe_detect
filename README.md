@@ -53,7 +53,7 @@ python main.py -i input_folder/ -o output/ --batch
 
 ```
 output/
-  <image_name>/
+  <image_path>/
     processed.png          # 预处理后的图像
     edges.png              # 边缘检测结果
     visualization.png      # 可视化图（包含检测过程）
