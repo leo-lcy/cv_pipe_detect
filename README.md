@@ -15,7 +15,6 @@
 ## 环境要求
 
 ```bash
-# Python 3.7+
 pip install opencv-python numpy matplotlib scipy
 ```
 
@@ -39,12 +38,6 @@ python main.py -i image.jpg -o output/
 python main.py -i input_folder/ -o output/ --batch
 ```
 
-### 4. 递归处理所有子文件夹
-
-```bash
-python main.py -i input_folder/ -o output/ --batch --recursive
-```
-
 ## 命令行参数
 
 | 参数 | 说明 | 必需 |
@@ -52,9 +45,7 @@ python main.py -i input_folder/ -o output/ --batch --recursive
 | `-i, --input` | 输入图像文件或文件夹路径 | 是 |
 | `-o, --output` | 输出目录（默认：当前目录或./output） | 否 |
 | `--batch` | 启用批量处理模式 | 否 |
-| `--recursive` | 递归搜索子文件夹（仅批量模式） | 否 |
 | `--show` | 显示可视化窗口（仅单图模式） | 否 |
-| `--save-intermediate` | 保存中间处理结果 | 否 |
 
 ## 输出结构
 
@@ -66,7 +57,7 @@ output/
     processed.png          # 预处理后的图像
     edges.png              # 边缘检测结果
     visualization.png      # 可视化图（包含检测过程）
-    result_pipe_detection.jpg  # 最终结果标注图
+    result.jpg  # 最终结果标注图
 ```
 
 ### 批量处理输出
@@ -77,7 +68,7 @@ output/
     processed.png
     edges.png
     visualization.png
-    result_pipe_detection.jpg
+    result.jpg
   <image2>/
     ...
   results.csv              # 汇总所有检测结果
@@ -102,40 +93,3 @@ output/
 4. **径向分析**：直方图峰值检测识别候选半径
 5. **RANSAC拟合**：对每个候选半径进行鲁棒圆拟合
 6. **结果筛选**：选择得分最高且半径差异明显的两个圆
-
-## 示例
-
-```bash
-# 处理单张图片并查看结果
-python main.py -i 20pipe/image.jpg --show
-
-# 批量处理整个文件夹
-python main.py -i 20pipe/ -o results/ --batch
-
-# 递归处理所有图片
-python main.py -i dataset/ -o output/ --batch --recursive
-```
-
-## 注意事项
-
-- 输入图像应为清晰的金属管道截面图
-- 支持的图像格式：PNG, JPG, JPEG, BMP, TIF, TIFF
-- 建议图像分辨率不低于 800x800
-- 管道应占据图像的主要部分
-- 批量处理时会自动跳过无法读取的文件
-
-## 故障排查
-
-**问题：检测不到圆**
-- 检查图像质量和对比度
-- 调整霍夫变换参数（`minRadius`, `maxRadius`）
-- 确保管道边缘清晰
-
-**问题：检测到的圆不准确**
-- 增加边缘点数量（调低Canny阈值）
-- 调整RANSAC参数（`threshold`, `max_iterations`）
-- 检查图像中是否有干扰物
-
-## 许可证
-
-MIT License

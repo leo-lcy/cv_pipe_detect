@@ -1,14 +1,12 @@
 import cv2
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy import ndimage
-from scipy.signal import find_peaks
-import os
-import glob
 import csv
-import argparse
 import sys
+import argparse
+import numpy as np
 from pathlib import Path
+from scipy import ndimage
+import matplotlib.pyplot as plt
+from scipy.signal import find_peaks
 
 def preprocess_image(img, save_path=None):
     """预处理图像，去除干扰"""
@@ -160,7 +158,7 @@ def detect_pipe_circles(img, visualization=True, output_dir=None, save_intermedi
 
     processed = preprocess_image(img, save_path=(outdir / "processed.png") if (outdir and save_intermediate) else None)
     
-    # 自适应边缘检测 - 使用更宽松的阈值捕获更多边缘
+    # 自适应边缘检测
     high_thresh = np.percentile(processed, 90)
     low_thresh = high_thresh * 0.3
     edges = cv2.Canny(processed, low_thresh, high_thresh)
@@ -171,7 +169,7 @@ def detect_pipe_circles(img, visualization=True, output_dir=None, save_intermedi
     
     # 去除小的连通域（噪点）
     num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(edges, connectivity=8)
-    min_size = 100  # 最小连通域大小
+    min_size = 50  # 最小连通域大小
     cleaned_edges = np.zeros_like(edges)
     for i in range(1, num_labels):
         if stats[i, cv2.CC_STAT_AREA] >= min_size:
@@ -243,7 +241,6 @@ def detect_pipe_circles(img, visualization=True, output_dir=None, save_intermedi
     
     if len(peaks) >= 2:
         print(f"检测到 {len(peaks)} 个潜在半径峰值: {bin_centers[peaks]}")
-        # (调试) 保存半径直方图数据到文件（可选）
         
         candidate_circles = []
         for peak_idx in peaks:
@@ -298,12 +295,10 @@ def detect_pipe_circles(img, visualization=True, output_dir=None, save_intermedi
     else:
         print("未检测到足够的圆边缘峰值")
 
-    # 可视化（传入霍夫圆） — 若 outdir 指定并需要保存，则让可视化保存到文件
+    # 可视化：只有在交互展示模式时调用
     if visualization:
-        vis_save = None
-        if outdir is not None:
-            vis_save = outdir / "visualization.png"
-        visualize_results(img, processed, edges, outer_circle, inner_circle, edge_points, hough_circles=hough_circles, save_path=vis_save, show=visualization)
+        vis_save = outdir / "visualization.png" if outdir is not None else None
+        visualize_results(img, edges, outer_circle, inner_circle, edge_points, hough_circles=hough_circles, save_path=vis_save, show=True)
     
     # 计算管壁厚度
     wall_thickness = None
@@ -320,7 +315,7 @@ def detect_pipe_circles(img, visualization=True, output_dir=None, save_intermedi
 
     return outer_circle, inner_circle, wall_thickness, extras
 
-def visualize_results(original, processed, edges, outer_circle, inner_circle, edge_points, hough_circles=None, save_path=None, show=True):
+def visualize_results(original, edges, outer_circle, inner_circle, edge_points, hough_circles=None, save_path=None, show=True):
     """可视化结果"""
     plt.figure(figsize=(20, 5))
     
@@ -364,11 +359,10 @@ def visualize_results(original, processed, edges, outer_circle, inner_circle, ed
     thickness = None
     if outer_circle is not None and inner_circle is not None:
         thickness = outer_circle[2] - inner_circle[2]
-        # 在第3子图的左下角以 Axes 坐标标注（更稳健）
         ax.text(0.02, 0.06, f"Wall thickness: {thickness}px", transform=ax.transAxes,
                 color='yellow', fontsize=12, bbox=dict(facecolor='black', alpha=0.5))
 
-    # 检测结果叠加（子图4）
+    # 检测结果图
     ax4 = plt.subplot(1, 4, 4)
     result = cv2.cvtColor(original, cv2.COLOR_GRAY2BGR) if len(original.shape) == 2 else original.copy()
 
@@ -405,16 +399,16 @@ def process_folder(input_path, output_root):
           processed.png
           edges.png
           visualization.png
-          result_pipe_detection.jpg
+          result.jpg
         results.csv
     """
     input_path = Path(input_path)
     output_root = Path(output_root)
     output_root.mkdir(parents=True, exist_ok=True)
 
-    exts = ('*.png', '*.jpg', '*.jpeg', '*.bmp', '*.tif', '*.tiff')
     files = []
     if input_path.is_dir():
+        exts = ('*.jpg',)
         for e in exts:
             files.extend(input_path.glob(e))
     elif input_path.is_file():
@@ -425,8 +419,9 @@ def process_folder(input_path, output_root):
     results = []
     for f in sorted(files):
         print(f"处理: {f}")
-        # 复用单图处理函数以保证批量与单张输出一致
-        res = process_single_image(f, output_root, show_visualization=False)
+        # 为每张图创建独立子目录
+        per_image_out = output_root / f.stem
+        res = process_single_image(f, per_image_out, show_visualization=False)
         if res is None:
             results.append({
                 'filename': str(f.name),
@@ -484,9 +479,8 @@ def process_single_image(img_path, output_dir=None, show_visualization=False):
         print(f"错误: 无法读取图像: {img_path}")
         return None
     
-    # 设置输出目录
     if output_dir is not None:
-        outdir = Path(output_dir) / img_path.stem
+        outdir = Path(output_dir)
         outdir.mkdir(parents=True, exist_ok=True)
     else:
         outdir = None
@@ -508,22 +502,18 @@ def process_single_image(img_path, output_dir=None, show_visualization=False):
         print(f"外圆: 中心({outer[0]}, {outer[1]}), 半径={outer[2]} pixels")
         print(f"      外径={outer[2] * 2} pixels")
     else:
-        print("⚠ 未检测到外圆")
+        print("未检测到外圆")
     
     if inner is not None:
         print(f"内圆: 中心({inner[0]}, {inner[1]}), 半径={inner[2]} pixels")
         print(f"      内径={inner[2] * 2} pixels")
     else:
-        print("⚠ 未检测到内圆")
+        print("未检测到内圆")
     
-    if thickness is not None:
-        print(f"\n✓ 管壁厚度: {thickness} pixels")
-    else:
-        print("\n⚠ 无法计算管壁厚度")
-    
+    print(f"\n管壁厚度: {thickness} pixels")
     print("="*50)
     
-    # 保存结果图像
+    # 保存结果图像（如果处于展示模式则不保存）
     if outer is not None or inner is not None:
         result_img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
         if outer is not None:
@@ -544,15 +534,15 @@ def process_single_image(img_path, output_dir=None, show_visualization=False):
             cv2.putText(result_img, f"Wall Thickness={thickness}px", 
                        (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 255, 255), 3)
         
-        # 保存到输出目录或当前目录
-        if outdir is not None:
-            save_path = outdir / "result_pipe_detection.jpg"
-        else:
-            save_path = Path("result_pipe_detection.jpg")
-        
-        cv2.imwrite(str(save_path), result_img)
-        print(f"\n结果已保存到: {save_path}")
-        print("*" * 70)
+        # 如果是展示模式，则跳过保存最终结果图片
+        if not show_visualization:
+            if outdir is not None:
+                save_path = outdir / "result.jpg"
+            else:
+                save_path = Path("result.jpg")
+            cv2.imwrite(str(save_path), result_img)
+            print(f"\n结果已保存到: {save_path}")
+            print("*" * 70)
     
     return outer, inner, thickness
 
@@ -583,8 +573,6 @@ def main():
                        help='批量处理模式（处理文件夹中所有图像）')
     parser.add_argument('--show', action='store_true',
                        help='显示可视化窗口（仅在单图模式下有效）')
-    parser.add_argument('--save-intermediate', action='store_true',
-                       help='保存中间处理结果（processed.png, edges.png）')
     
     args = parser.parse_args()
     
