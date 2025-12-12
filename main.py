@@ -211,8 +211,8 @@ def detect_pipe_circles(img, visualization=True, output_dir=None, save_intermedi
         cv2.HOUGH_GRADIENT,
         dp=1,
         minDist=50,
-        param1=50,
-        param2=15,
+        param1=100,
+        param2=30,
         minRadius=int(min(img.shape[:2]) * 0.1),
         maxRadius=int(min(img.shape[:2]) * 0.8)
     )
@@ -223,7 +223,7 @@ def detect_pipe_circles(img, visualization=True, output_dir=None, save_intermedi
         center_y, center_x = np.mean(edge_points, axis=0)
     else:
         circles = circles_hough[0, :]
-        k = min(len(circles), 5)
+        k = min(len(circles), 1)
         center_x = np.median(circles[:k, 0])
         center_y = np.median(circles[:k, 1])
         print(f"估计圆心: ({center_x:.1f}, {center_y:.1f})")
@@ -231,7 +231,7 @@ def detect_pipe_circles(img, visualization=True, output_dir=None, save_intermedi
         # 准备霍夫变换检测到的圆列表，传给可视化函数
         hough_circles = []
         # 只取前 k 个霍夫检测结果用于可视化
-        for c in circles_hough[0][:5]:
+        for c in circles_hough[0][:1]:
             hough_circles.append((float(c[0]), float(c[1]), float(c[2])))
 
     # 2. 径向直方图分析 (利用同心圆特性)
@@ -241,10 +241,23 @@ def detect_pipe_circles(img, visualization=True, output_dir=None, save_intermedi
     hist, bin_edges = np.histogram(distances, bins=int(max_dist/2))
     bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
     
-    hist_smooth = ndimage.gaussian_filter1d(hist, sigma=2)
+    peaks, _ = find_peaks(hist, height=np.max(hist)*0.2, distance=10)
     
-    peaks, _ = find_peaks(hist_smooth, height=np.max(hist_smooth)*0.2, distance=10)
-    
+    # 保存径向直方图
+    try:
+        hist_path = (outdir / 'radius_hist.png') if outdir is not None else Path('radius_hist.png')
+        plt.figure()
+        plt.plot(bin_centers, hist, color='C0')
+        if len(peaks) > 0:
+            plt.scatter(bin_centers[peaks], hist[peaks], color='C1')
+        plt.xlabel('Radius (px)')
+        plt.ylabel('Counts')
+        plt.title('Radial histogram')
+        plt.savefig(str(hist_path), dpi=200, bbox_inches='tight')
+        plt.close()
+    except Exception:
+        print('Warning: 无法保存径向直方图')
+
     outer_circle = None
     inner_circle = None
     
@@ -254,7 +267,7 @@ def detect_pipe_circles(img, visualization=True, output_dir=None, save_intermedi
         candidate_circles = []
         for peak_idx in peaks:
             radius_guess = bin_centers[peak_idx]
-            mask = np.abs(distances - radius_guess) < 10
+            mask = np.abs(distances - radius_guess) < 30
             peak_points = edge_points[mask]
             
             if len(peak_points) < 50:
