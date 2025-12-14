@@ -4,26 +4,27 @@ import sys
 import argparse
 import numpy as np
 from pathlib import Path
-from scipy import ndimage
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks
 
 def preprocess_image(img, save_path=None):
-    """预处理图像，去除干扰"""
-    # 使用双边滤波保持边缘的同时去噪
-    denoised = cv2.bilateralFilter(img, 9, 75, 75)
+    """
+    针对玻璃划痕与高光金属管端面的稳健预处理
+    """
 
-    # 使用中值滤波进一步去除椒盐噪声
-    denoised = cv2.medianBlur(denoised, 3)
+    # 1. 百分位裁剪，压制低灰度干扰（划痕通常在低灰度）
+    low = np.percentile(img, 20)
+    high = np.percentile(img, 99)
+    clipped = np.clip(img, low, high)
+    clipped = cv2.normalize(clipped, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
 
-    # 使用形态学操作去除小的干扰
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-    morphed = cv2.morphologyEx(denoised, cv2.MORPH_CLOSE, kernel)
+    # 2. 边缘保护型平滑
+    denoised = cv2.bilateralFilter(clipped, 7, 50, 50)
 
     if save_path is not None:
-        cv2.imwrite(str(save_path), morphed)
+        cv2.imwrite(str(save_path), denoised)
 
-    return morphed
+    return denoised
 
 def ransac_circle_fit(points, max_iterations=1000, threshold=3.0, min_inliers_ratio=0.6):
     """使用RANSAC算法拟合圆
