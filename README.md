@@ -52,11 +52,11 @@ python main.py -i input_folder/ -o output/ --batch
 ### 单图处理输出
 
 ```
-output/
-  <image_path>/
-    processed.png          # 预处理后的图像
+output_<image_name>/
     edges.png              # 边缘检测结果
-    visualization.png      # 可视化图（包含检测过程）
+    processed.png          # 预处理后的图像
+    radius_hist.png        # 半径直方图及其峰值
+    radius_peaks.csv       # 半径峰值
     result.jpg  # 最终结果标注图
 ```
 
@@ -65,9 +65,10 @@ output/
 ```
 output/
   <image1>/
-    processed.png
     edges.png
-    visualization.png
+    processed.png
+    radius_hist.png
+    radius_peaks.csv
     result.jpg
   <image2>/
     ...
@@ -87,7 +88,7 @@ output/
 
 ## 算法流程
 
-1. **图像预处理**：双边滤波 → 中值滤波 → 形态学操作
+1. **图像预处理**：百分位裁剪 → 双边滤波
 2. **边缘检测**：自适应Canny边缘检测 → 连通域过滤
 3. **圆心估计**：霍夫圆变换初始估计
 4. **径向分析**：直方图峰值检测识别候选半径
